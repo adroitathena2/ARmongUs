@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Admin</title>
+</head>
+
+<body>
+    <h1>Game Admin Control</h1>
+    <p>Status: <span id="status">Connecting...</span></p>
+
+    <div>
+        <button id="forceStartBtn">Force Start Game</button>
+        <button id="forceStopBtn">Force Stop Game</button>
+        <button id="resetBtn">Reset Game</button>
+    </div>
+
+    <h2>Server Messages:</h2>
+    <pre id="messages"></pre>
+
+    <script>
+        const statusElem = document.getElementById('status');
+        const messagesElem = document.getElementById('messages');
+        const forceStartBtn = document.getElementById('forceStartBtn');
+        const forceStopBtn = document.getElementById('forceStopBtn');
+        const resetBtn = document.getElementById('resetBtn');
+
+        // Establish WebSocket connection to the admin server
+        const ws = new WebSocket('ws://13.126.167.90:54813');
+
+        ws.onopen = () => {
+            statusElem.textContent = 'Connected';
+            console.log('Admin WebSocket connected.');
+        };
+
+        ws.onmessage = (event) => {
+            // Prepend new messages to the log
+            const messageData = JSON.parse(event.data);
+            console.log('Message from server:', messageData);
+            messagesElem.textContent = JSON.stringify(messageData, null, 2) + '\n\n' + messagesElem.textContent;
+        };
+
+        ws.onerror = (error) => {
+            statusElem.textContent = 'Error!';
+            console.error('WebSocket Error:', error);
+        };
+
+        ws.onclose = () => {
+            statusElem.textContent = 'Disconnected';
+            console.log('Admin WebSocket disconnected.');
+        };
+
+        /**
+         * Sends a JSON message to the WebSocket server.
+         * @param {object} data - The data object to send.
+         */
+        function sendMessage(data) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(data));
+                console.log('Sent:', data);
+            } else {
+                console.error('WebSocket is not open. ReadyState:', ws.readyState);
+            }
+        }
+
+        // --- Event Listeners for Admin Actions ---
+
+        forceStartBtn.onclick = () => {
+            sendMessage({
+                type: 'A2S_FORCE_START_GAME'
+            });
+        };
+
+        forceStopBtn.onclick = () => {
+            sendMessage({
+                type: 'A2S_FORCE_STOP_GAME'
+            });
+        };
+
+        resetBtn.onclick = () => {
+            sendMessage({
+                type: 'A2S_RESET_GAME'
+            });
+        };
+    </script>
+</body>
+
+</html>

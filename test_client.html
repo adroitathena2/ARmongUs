@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Player</title>
+</head>
+
+<body>
+    <h1>Game Player</h1>
+    <p>Status: <span id="status">Connecting...</span></p>
+
+    <div id="reconnect-section">
+        <input type="text" id="reconnectIdInput" placeholder="Enter your Player ID to reconnect">
+        <button id="reconnectBtn">Reconnect</button>
+    </div>
+    <hr>
+
+    <h2>My Info</h2>
+    <p>Player ID: <b id="playerId">N/A</b></p>
+    <p>Role: <b id="playerRole">N/A</b></p>
+    <p>Tasks Left: <b id="tasksLeft">N/A</b></p>
+    <p>Alive: <b id="isAlive">Yes</b></p>
+
+    <h2>Game State</h2>
+    <p>Game Timer: <span id="timer">0</span>s</p>
+    <p>Crewmates Left: <span id="crewmateCount">?</span></p>
+    <p>Imposters Left: <span id="imposterCount">?</span></p>
+    <p>Total Tasks Left: <span id="totalTasksCount">?</span></p>
+    <p>Game Over Reason: <span id="gameOverReason"></span></p>
+    <p>Meeting Status: <span id="meetingStatus">No meeting</span></p>
+
+    <h2>Actions</h2>
+    <button id="taskDoneBtn">Complete a Task</button>
+    <button id="callMeetingBtn">Call Emergency Meeting</button>
+    <br><br>
+    <input type="text" id="targetPlayerId" placeholder="Target Player ID">
+    <button id="killBtn">Kill Player (Imposter)</button>
+    <button id="voteBtn">Vote for Player (Meeting)</button>
+
+    <h2>Server Messages:</h2>
+    <pre id="messages"></pre>
+
+    <script>
+        // --- Element References ---
+        const statusElem = document.getElementById('status');
+        const messagesElem = document.getElementById('messages');
+        const reconnectBtn = document.getElementById('reconnectBtn');
+        const reconnectIdInput = document.getElementById('reconnectIdInput');
+
+        // Player Info
+        const playerIdElem = document.getElementById('playerId');
+        const playerRoleElem = document.getElementById('playerRole');
+        const tasksLeftElem = document.getElementById('tasksLeft');
+        const isAliveElem = document.getElementById('isAlive');
+
+        // Game State
+        const timerElem = document.getElementById('timer');
+        const crewmateCountElem = document.getElementById('crewmateCount');
+        const imposterCountElem = document.getElementById('imposterCount');
+        const totalTasksCountElem = document.getElementById('totalTasksCount');
+        const gameOverReasonElem = document.getElementById('gameOverReason');
+        const meetingStatusElem = document.getElementById('meetingStatus');
+
+        // Action Buttons
+        const taskDoneBtn = document.getElementById('taskDoneBtn');
+        const callMeetingBtn = document.getElementById('callMeetingBtn');
+        const killBtn = document.getElementById('killBtn');
+        const voteBtn = document.getElementById('voteBtn');
+        const targetPlayerIdInput = document.getElementById('targetPlayerId');
+
+        // --- WebSocket Logic ---
+        let ws;
+        let myPlayerId = null;
+
+        function connect() {
+            ws = new WebSocket('ws://13.126.167.90:8765');
+
+            ws.onopen = () => {
+                statusElem.textContent = 'Connected';
+                console.log('Player WebSocket connected.');
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                console.log('Message from server:', msg);
+                messagesElem.textContent = JSON.stringify(msg, null, 2) + '\n\n' + messagesElem.textContent;
+
+                // Handle different message types from the server
+                handleServerMessage(msg);
+            };
+
+            ws.onerror = (error) => {
+                statusElem.textContent = 'Error!';
+                console.error('WebSocket Error:', error);
+            };
+
+            ws.onclose = () => {
+                statusElem.textContent = 'Disconnected';
+                console.log('Player WebSocket disconnected.');
+            };
+        }
+
+        connect(); // Initial connection
+
+        /**
+         * Sends a JSON message to the WebSocket server.
+         * @param {object} data - The data object to send.
+         */
+        function sendMessage(data) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(data));
+                console.log('Sent:', data);
+            } else {
+                console.error('WebSocket is not open.');
+            }
+        }
+
+        /**
+         * Processes incoming messages from the server and updates the UI.
+         * @param {object} msg - The parsed message object.
+         */
+        function handleServerMessage(msg) {
+            switch (msg.type) {
+                case 'S2C_ASSIGN_PLAYER':
+                    myPlayerId = msg.id;
+                    playerIdElem.textContent = msg.id;
+                    playerRoleElem.textContent = msg.role;
+                    tasksLeftElem.textContent = msg.numberOfTasksLeft;
+                    break;
+                case 'S2C_UPDATE_TIMER':
+                    timerElem.textContent = `${msg.timer}s`;
+                    break;
+                case 'S2C_UPDATE_IMPOSTER_COUNT':
+                    imposterCountElem.textContent = msg.count;
+                    break;
+                case 'S2C_UPDATE_CREWMATE_COUNT':
+                    crewmateCountElem.textContent = msg.count;
+                    break;
+                case 'S2C_UPDATE_TASKS_COUNT':
+                    totalTasksCountElem.textContent = msg.count;
+                    break;
+                case 'S2C_DEATH':
+                    isAliveElem.textContent = 'No (You are dead)';
+                    alert('You have been killed!');
+                    break;
+                case 'S2C_EMERGENCY_MEETING':
+                    meetingStatusElem.textContent = 'Meeting in progress!';
+                    alert('An emergency meeting has been called!');
+                    break;
+                case 'S2C_EMERGENCY_MEETING_END':
+                    meetingStatusElem.textContent = 'No meeting';
+                    break;
+                case 'S2C_GAME_STARTED':
+                    gameOverReasonElem.textContent = 'Game in progress...';
+                    break;
+                case 'S2C_GAME_OVER':
+                    gameOverReasonElem.textContent = `Game Over! Reason: ${msg.reason}`;
+                    alert(`Game Over! Reason: ${msg.reason}`);
+                    break;
+            }
+        }
+
+        // --- Event Listeners for Player Actions ---
+
+        taskDoneBtn.onclick = () => {
+            sendMessage({
+                type: 'C2S_TASK_DONE'
+            });
+            // Note: The server will send an S2C_UPDATE_TASKS_COUNT, but we can optimistically update our own tasks.
+            let currentTasks = parseInt(tasksLeftElem.textContent);
+            if (currentTasks > 0) {
+                tasksLeftElem.textContent = currentTasks - 1;
+            }
+        };
+
+        callMeetingBtn.onclick = () => {
+            sendMessage({
+                type: 'C2S_CALL_MEETING'
+            });
+        };
+
+        killBtn.onclick = () => {
+            const targetId = targetPlayerIdInput.value;
+            if (targetId) {
+                sendMessage({
+                    type: 'C2S_IMPOSTER_KILL',
+                    playerID: targetId
+                });
+            } else {
+                alert('Please enter a player ID to kill.');
+            }
+        };
+
+        voteBtn.onclick = () => {
+            const targetId = targetPlayerIdInput.value;
+            if (targetId) {
+                sendMessage({
+                    type: 'C2S_VOTE_MEETING',
+                    playerID: targetId
+                });
+                alert(`You voted for player ${targetId}`);
+            } else {
+                alert('Please enter a player ID to vote for.');
+            }
+        };
+
+        reconnectBtn.onclick = () => {
+            const reconnectId = reconnectIdInput.value;
+            if (!reconnectId) {
+                alert('Please enter a Player ID to reconnect.');
+                return;
+            }
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                sendMessage({
+                    type: 'C2S_TRY_RECONNECT',
+                    playerID: reconnectId
+                });
+            } else {
+                alert('Connection is not active. Re-connecting now, then press Reconnect again.');
+                connect();
+            }
+        };
+    </script>
+</body>
+
+</html>
